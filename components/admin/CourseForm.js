@@ -85,12 +85,11 @@ export default function CourseForm() {
     const savedCourses = localStorage.getItem("courses");
     if (savedCourses) {
       const parsedCourses = JSON.parse(savedCourses);
-      // Optionally, you can set courseTitle, modules, etc., from saved data
-      // For simplicity, we'll keep the initial state as is unless you want to load a specific course
+
     }
-    if (userList && userList.length > 0) {
-      setAssignedUser([{ value: userList[0], label: userList[0].charAt(0).toUpperCase() + userList[0].slice(1) }]);
-    }
+    // if (userList && userList.length > 0) {
+    //   setAssignedUser([{ value: userList[0], label: userList[0].charAt(0).toUpperCase() + userList[0].slice(1) }]);
+    // }
   }, [userList]);
 
   const addModule = () => {

@@ -265,6 +265,8 @@ const handleSubmit = async () => {
       title: courseTitle,
       modules: processedModules.filter((m) => m.title.trim()),
       assignedUsers: assignedUser.map((user) => user.value),
+      createdAt: new Date().toISOString(), // Add this line
+      id: Date.now(), // Also good to have a unique ID
     };
 
     // Save to local storage

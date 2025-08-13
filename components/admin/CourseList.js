@@ -90,7 +90,9 @@ useEffect(() => {
             </p>
           </div>
         ) : (
-          filteredCourses.map((course) => (
+         [...filteredCourses]
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .map((course) => (
             <div
               key={course.id}
               className="border border-gray-200 rounded-lg p-4 hover:shadow-md hover:border-green-300 transition-all duration-200 bg-white"

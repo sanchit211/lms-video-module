@@ -62,7 +62,7 @@ export default function ModuleViewer({ course: propCourse, onBack }) {
       setShowCorrectAnswers(false);
     } else {
       setShowCorrectAnswers(true);
-      alert("Some answers are incorrect. Please review and try again!");
+      alert("You have selected the wrong answers.");
     }
   };
 
@@ -366,7 +366,7 @@ export default function ModuleViewer({ course: propCourse, onBack }) {
                             }`}>
                               {quizAnswers[index] === optIdx && (
                                 <div className="h-2 w-2 rounded-full bg-white"></div>
-                              )}
+                )}
                             </div>
                             <span className="text-gray-700">{option}</span>
                           </label>

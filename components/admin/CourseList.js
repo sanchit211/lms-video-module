@@ -5,15 +5,25 @@ import { BookOpen, ChevronDown, ChevronUp, Trash2, Users, PlayCircle, FileVideo 
 import { useEffect, useState } from 'react';
 
 export default function CourseList() {
-  const { user, deleteCourse } = useAuth();
+  const { user, courses: contextCourses, 
+    deleteCourse: contextDeleteCourse, deleteCourse } = useAuth();
+
   const [localCourses, setLocalCourses] = useState([]);
   const [expandedModules, setExpandedModules] = useState({});
 
   // Load courses from local storage on mount
-  useEffect(() => {
+useEffect(() => {
     const savedCourses = JSON.parse(localStorage.getItem('courses') || '[]');
-    setLocalCourses(savedCourses);
-  }, []);
+    
+    // Use context courses if they exist, otherwise fall back to localStorage
+    if (contextCourses && contextCourses.length > 0) {
+      setLocalCourses(contextCourses);
+    } else {
+      setLocalCourses(savedCourses);
+    }
+  }, [contextCourses]);
+
+  console.log("saved coures in listing", localCourses)
 
   const toggleModule = (courseId, moduleIndex) => {
     setExpandedModules((prev) => ({

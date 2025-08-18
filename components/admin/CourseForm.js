@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { Plus, Trash2, ChevronDown, ChevronUp, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import Select from "react-select";
+import { db } from "@/app/firebaseConfig";
+import { collection, addDoc, getDocs, serverTimestamp } from "firebase/firestore";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 export default function CourseForm() {
   const { addCourse, userList } = useAuth();
@@ -16,7 +19,7 @@ export default function CourseForm() {
           title: "",
           videoUrl: "",
           videoFile: null,
-          videoBase64: "", // Added to store Base64 string temporarily
+          videoDownloadUrl: "", // Store Firebase Storage download URL
           videoType: "link", // 'link' or 'upload'
         },
       ],
@@ -32,7 +35,12 @@ export default function CourseForm() {
   const [assignedUser, setAssignedUser] = useState([]);
   const [showModulePopup, setShowModulePopup] = useState(false);
   const [currentModuleIndex, setCurrentModuleIndex] = useState(0);
-  const [storageWarning, setStorageWarning] = useState(""); // Added for storage limit warnings
+  const [storageWarning, setStorageWarning] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({});
+
+  // Initialize Firebase Storage
+  const storage = getStorage();
 
   const userOptions =
     userList?.map((user) => ({
@@ -80,16 +88,24 @@ export default function CourseForm() {
     }),
   };
 
-  // Load saved courses from local storage on mount
+  // Load saved courses from Firebase on mount
   useEffect(() => {
-    const savedCourses = localStorage.getItem("courses");
-    if (savedCourses) {
-      const parsedCourses = JSON.parse(savedCourses);
+    const loadCoursesFromFirebase = async () => {
+      try {
+        const coursesCollection = collection(db, "courses");
+        const coursesSnapshot = await getDocs(coursesCollection);
+        const coursesList = coursesSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        console.log("Loaded courses from Firebase:", coursesList);
+      } catch (error) {
+        console.error("Error loading courses from Firebase:", error);
+        setStorageWarning("Failed to load courses from database.");
+      }
+    };
 
-    }
-    // if (userList && userList.length > 0) {
-    //   setAssignedUser([{ value: userList[0], label: userList[0].charAt(0).toUpperCase() + userList[0].slice(1) }]);
-    // }
+    loadCoursesFromFirebase();
   }, [userList]);
 
   const addModule = () => {
@@ -102,7 +118,7 @@ export default function CourseForm() {
             title: "",
             videoUrl: "",
             videoFile: null,
-            videoBase64: "",
+            videoDownloadUrl: "",
             videoType: "link",
           },
         ],
@@ -130,7 +146,7 @@ export default function CourseForm() {
       title: "",
       videoUrl: "",
       videoFile: null,
-      videoBase64: "",
+      videoDownloadUrl: "",
       videoType: "link",
     });
     setModules(newModules);
@@ -201,35 +217,76 @@ export default function CourseForm() {
     newModules[moduleIndex].sections[sectionIndex].videoType = type;
     if (type === "link") {
       newModules[moduleIndex].sections[sectionIndex].videoFile = null;
-      newModules[moduleIndex].sections[sectionIndex].videoBase64 = "";
+      newModules[moduleIndex].sections[sectionIndex].videoDownloadUrl = "";
     } else {
       newModules[moduleIndex].sections[sectionIndex].videoUrl = "";
     }
     setModules(newModules);
   };
 
-  const handleFileUpload = (moduleIndex, sectionIndex, e) => {
+  // Upload video to Firebase Storage
+  const uploadVideoToStorage = async (file, moduleIndex, sectionIndex) => {
+    try {
+      const fileExtension = file.name.split('.').pop();
+      const fileName = `videos/${Date.now()}_${moduleIndex}_${sectionIndex}.${fileExtension}`;
+      const storageRef = ref(storage, fileName);
+      
+      // Set upload progress
+      setUploadProgress(prev => ({
+        ...prev,
+        [`${moduleIndex}-${sectionIndex}`]: 0
+      }));
+
+      // Upload file
+      const snapshot = await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      
+      // Clear upload progress
+      setUploadProgress(prev => {
+        const newProgress = { ...prev };
+        delete newProgress[`${moduleIndex}-${sectionIndex}`];
+        return newProgress;
+      });
+
+      return downloadURL;
+    } catch (error) {
+      console.error("Error uploading video:", error);
+      setUploadProgress(prev => {
+        const newProgress = { ...prev };
+        delete newProgress[`${moduleIndex}-${sectionIndex}`];
+        return newProgress;
+      });
+      throw error;
+    }
+  };
+
+  const handleFileUpload = async (moduleIndex, sectionIndex, e) => {
     const file = e.target.files[0];
     if (file) {
-      // Check file size (e.g., limit to 5MB to avoid local storage issues)
-      if (file.size > 5 * 1024 * 1024) {
-        setStorageWarning("Video file is too large. Please upload a file smaller than 5MB or use a video URL.");
+      // Check file size (Firebase Storage can handle larger files, but let's keep a reasonable limit)
+      if (file.size > 100 * 1024 * 1024) { // 100MB limit
+        setStorageWarning("Video file is too large. Please upload a file smaller than 100MB.");
         return;
       }
 
-      // Convert file to Base64
-      const reader = new FileReader();
-      reader.onload = (event) => {
+      try {
+        setStorageWarning("Uploading video to Firebase Storage...");
+        
+        // Upload to Firebase Storage and get download URL
+        const downloadURL = await uploadVideoToStorage(file, moduleIndex, sectionIndex);
+        
+        // Update the modules state with the download URL
         const newModules = [...modules];
         newModules[moduleIndex].sections[sectionIndex].videoFile = file;
-        newModules[moduleIndex].sections[sectionIndex].videoBase64 = event.target.result;
+        newModules[moduleIndex].sections[sectionIndex].videoDownloadUrl = downloadURL;
         setModules(newModules);
-        setStorageWarning(""); // Clear warning if successful
-      };
-      reader.onerror = () => {
-        setStorageWarning("Error reading the video file. Please try again.");
-      };
-      reader.readAsDataURL(file);
+        
+        setStorageWarning("Video uploaded successfully!");
+        setTimeout(() => setStorageWarning(""), 3000);
+      } catch (error) {
+        console.error("Error uploading video:", error);
+        setStorageWarning("Error uploading video. Please try again.");
+      }
     }
   };
 
@@ -238,92 +295,121 @@ export default function CourseForm() {
     setShowModulePopup(true);
   };
 
-const handleSubmit = async () => {
-  if (
-    courseTitle.trim() &&
-    modules.some(
-      (m) => m.title.trim() && m.sections.some((s) => s.title.trim())
-    )
-  ) {
-    const processedModules = modules.map((module) => ({
-      ...module,
-      sections: module.sections.map((section) => {
-        if (section.videoType === "upload" && section.videoFile) {
-          return {
-            ...section,
-            videoUrl: "", // Clear URL if it exists
-            videoFileName: section.videoFile.name, // Store file name
-            videoBase64: section.videoBase64, // Store Base64 string
-            isUploadedVideo: true,
-          };
-        }
-        return section;
-      }),
-    }));
-
-    const courseData = {
-      title: courseTitle,
-      modules: processedModules.filter((m) => m.title.trim()),
-      assignedUsers: assignedUser.map((user) => user.value),
-      createdAt: new Date().toISOString(), // Add this line
-      id: Date.now(), // Also good to have a unique ID
-    };
-
-    // Save to local storage
+  const saveCourseToFirebase = async (courseData) => {
     try {
-      const existingCourses = JSON.parse(localStorage.getItem("courses") || "[]");
-      // Clean up Base64 for storage (optional: store only metadata to save space)
-      const courseDataForStorage = {
-        ...courseData,
-        modules: courseData.modules.map((module) => ({
-          ...module,
-          sections: module.sections.map((section) => ({
-            ...section,
-            // Optionally, omit videoBase64 to save space and store only metadata
-            videoBase64: section.videoBase64 ? "Base64 data stored" : "",
-          })),
-        })),
+      setIsLoading(true);
+      
+      // Process modules for Firebase storage
+      const processedModules = courseData.modules.map((module) => ({
+        ...module,
+        sections: module.sections.map((section) => {
+          if (section.videoType === "upload" && section.videoDownloadUrl) {
+            return {
+              title: section.title,
+              videoUrl: section.videoDownloadUrl, // Use Firebase Storage URL
+              videoFileName: section.videoFile?.name || "Uploaded Video",
+              videoType: section.videoType,
+              isUploadedVideo: true,
+            };
+          }
+          return {
+            title: section.title,
+            videoUrl: section.videoUrl,
+            videoType: section.videoType,
+            isUploadedVideo: false,
+          };
+        }),
+      }));
+
+      const courseDataForFirebase = {
+        title: courseData.title,
+        modules: processedModules,
+        assignedUsers: courseData.assignedUsers,
+        createdAt: serverTimestamp(),
+        createdBy: "current_user", // You can replace this with actual user ID from auth context
       };
-      existingCourses.push(courseDataForStorage);
-      localStorage.setItem("courses", JSON.stringify(existingCourses));
-      setStorageWarning("Course saved to local storage successfully!");
+
+      // Add document to Firestore
+      const docRef = await addDoc(collection(db, "courses"), courseDataForFirebase);
+      
+      setStorageWarning("Course saved to Firebase successfully!");
+      console.log("Course saved with ID: ", docRef.id);
+      
+      return docRef.id;
     } catch (error) {
-      setStorageWarning("Failed to save course to local storage. Storage may be full.");
-      console.error(error);
+      console.error("Error saving course to Firebase:", error);
+      setStorageWarning("Failed to save course to Firebase. Please try again.");
+      throw error;
+    } finally {
+      setIsLoading(false);
     }
+  };
 
-    // Call addCourse (assuming it handles server-side or other logic)
-    addCourse(courseData);
+  const handleSubmit = async () => {
+    if (
+      courseTitle.trim() &&
+      modules.some(
+        (m) => m.title.trim() && m.sections.some((s) => s.title.trim())
+      )
+    ) {
+      // Check if any videos are still uploading
+      const hasUploadingVideos = Object.keys(uploadProgress).length > 0;
+      if (hasUploadingVideos) {
+        setStorageWarning("Please wait for all videos to finish uploading.");
+        return;
+      }
 
-    // Reset form
-    setCourseTitle("");
-    setModules([
-      {
-        title: "",
-        sections: [
+      const courseData = {
+        title: courseTitle,
+        modules: modules.filter((m) => m.title.trim()),
+        assignedUsers: assignedUser.map((user) => user.value),
+        createdAt: new Date().toISOString(),
+        id: Date.now(),
+      };
+
+      try {
+        // Save to Firebase
+        await saveCourseToFirebase(courseData);
+
+        // Call addCourse (assuming it handles other logic like context updates)
+        addCourse(courseData);
+
+        // Reset form
+        setCourseTitle("");
+        setModules([
           {
             title: "",
-            videoUrl: "",
-            videoFile: null,
-            videoBase64: "",
-            videoType: "link",
+            sections: [
+              {
+                title: "",
+                videoUrl: "",
+                videoFile: null,
+                videoDownloadUrl: "",
+                videoType: "link",
+              },
+            ],
+            quizzes: [
+              {
+                question: "",
+                options: ["", "", "", ""],
+                correctAnswer: 0,
+              },
+            ],
           },
-        ],
-        quizzes: [
-          {
-            question: "",
-            options: ["", "", "", ""],
-            correctAnswer: 0,
-          },
-        ],
-      },
-    ]);
-    setAssignedUser([]);
-    setStorageWarning("");
-  } else {
-    setStorageWarning("Please fill in the course title and at least one module with a section title.");
-  }
-};
+        ]);
+        setAssignedUser([]);
+        
+        // Clear warning after successful save
+        setTimeout(() => {
+          setStorageWarning("");
+        }, 3000);
+      } catch (error) {
+        console.error("Submit error:", error);
+      }
+    } else {
+      setStorageWarning("Please fill in the course title and at least one module with a section title.");
+    }
+  };
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
@@ -333,7 +419,13 @@ const handleSubmit = async () => {
       </h2>
 
       {storageWarning && (
-        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">
+        <div className={`mb-4 p-3 rounded-lg ${
+          storageWarning.includes("successfully") 
+            ? "bg-green-100 text-green-700" 
+            : storageWarning.includes("Uploading") 
+            ? "bg-blue-100 text-blue-700"
+            : "bg-red-100 text-red-700"
+        }`}>
           {storageWarning}
         </div>
       )}
@@ -349,6 +441,7 @@ const handleSubmit = async () => {
             onChange={(e) => setCourseTitle(e.target.value)}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors"
             placeholder="Enter training title"
+            disabled={isLoading}
           />
         </div>
 
@@ -364,7 +457,7 @@ const handleSubmit = async () => {
             className="basic-multi-select"
             classNamePrefix="select"
             styles={selectStyles}
-            isDisabled={!userList || userList.length === 0}
+            isDisabled={!userList || userList.length === 0 || isLoading}
             placeholder="Select users..."
           />
         </div>
@@ -377,7 +470,8 @@ const handleSubmit = async () => {
             <button
               type="button"
               onClick={addModule}
-              className="flex items-center gap-2 px-3 py-1 text-sm bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
+              disabled={isLoading}
+              className="flex items-center gap-2 px-3 py-1 text-sm bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus className="h-4 w-4" />
               Add Module
@@ -397,7 +491,8 @@ const handleSubmit = async () => {
                     </h4>
                     <button
                       onClick={() => openModulePopup(moduleIndex)}
-                      className="text-sm text-green-600 hover:text-green-800 font-medium"
+                      disabled={isLoading}
+                      className="text-sm text-green-600 hover:text-green-800 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Edit Content
                     </button>
@@ -406,7 +501,8 @@ const handleSubmit = async () => {
                     <button
                       type="button"
                       onClick={() => removeModule(moduleIndex)}
-                      className="text-red-500 hover:text-red-700 p-1 rounded transition-colors"
+                      disabled={isLoading}
+                      className="text-red-500 hover:text-red-700 p-1 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -429,9 +525,22 @@ const handleSubmit = async () => {
 
         <button
           onClick={handleSubmit}
-          className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 shadow-sm"
+          disabled={isLoading || Object.keys(uploadProgress).length > 0}
+          className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
-          Create Training
+          {isLoading ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              Saving to Firebase...
+            </>
+          ) : Object.keys(uploadProgress).length > 0 ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              Uploading Videos...
+            </>
+          ) : (
+            "Create Training"
+          )}
         </button>
       </div>
 
@@ -447,7 +556,8 @@ const handleSubmit = async () => {
               </h3>
               <button
                 onClick={() => setShowModulePopup(false)}
-                className="text-white hover:text-gray-200 p-1 rounded transition-colors"
+                disabled={isLoading}
+                className="text-white hover:text-gray-200 p-1 rounded transition-colors disabled:opacity-50"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -464,7 +574,8 @@ const handleSubmit = async () => {
                   onChange={(e) =>
                     updateModuleTitle(currentModuleIndex, e.target.value)
                   }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors"
+                  disabled={isLoading}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors disabled:opacity-50"
                   placeholder="Enter module title"
                 />
               </div>
@@ -486,17 +597,14 @@ const handleSubmit = async () => {
                             <h5 className="font-medium text-gray-900">
                               Section {sectionIndex + 1}
                             </h5>
-                            {modules[currentModuleIndex].sections.length >
-                              1 && (
+                            {modules[currentModuleIndex].sections.length > 1 && (
                               <button
                                 type="button"
                                 onClick={() =>
-                                  removeSection(
-                                    currentModuleIndex,
-                                    sectionIndex
-                                  )
+                                  removeSection(currentModuleIndex, sectionIndex)
                                 }
-                                className="text-red-500 hover:text-red-700 p-1 rounded transition-colors"
+                                disabled={isLoading}
+                                className="text-red-500 hover:text-red-700 p-1 rounded transition-colors disabled:opacity-50"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </button>
@@ -516,7 +624,8 @@ const handleSubmit = async () => {
                                   e.target.value
                                 )
                               }
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm transition-colors"
+                              disabled={isLoading}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm transition-colors disabled:opacity-50"
                             />
 
                             <div className="flex space-x-4 mb-3">
@@ -532,7 +641,8 @@ const handleSubmit = async () => {
                                       "link"
                                     )
                                   }
-                                  className="h-4 w-4 text-green-600 focus:ring-green-500"
+                                  disabled={isLoading}
+                                  className="h-4 w-4 text-green-600 focus:ring-green-500 disabled:opacity-50"
                                 />
                                 <label
                                   htmlFor={`video-link-${currentModuleIndex}-${sectionIndex}`}
@@ -541,7 +651,7 @@ const handleSubmit = async () => {
                                   Video Link
                                 </label>
                               </div>
-                              <div className="flex items-center">
+                              {/* <div className="flex items-center">
                                 <input
                                   id={`video-upload-${currentModuleIndex}-${sectionIndex}`}
                                   type="radio"
@@ -553,7 +663,8 @@ const handleSubmit = async () => {
                                       "upload"
                                     )
                                   }
-                                  className="h-4 w-4 text-green-600 focus:ring-green-500"
+                                  disabled={isLoading}
+                                  className="h-4 w-4 text-green-600 focus:ring-green-500 disabled:opacity-50"
                                 />
                                 <label
                                   htmlFor={`video-upload-${currentModuleIndex}-${sectionIndex}`}
@@ -561,7 +672,7 @@ const handleSubmit = async () => {
                                 >
                                   Upload Video
                                 </label>
-                              </div>
+                              </div> */}
                             </div>
 
                             {section.videoType === "link" ? (
@@ -577,7 +688,8 @@ const handleSubmit = async () => {
                                     e.target.value
                                   )
                                 }
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm transition-colors"
+                                disabled={isLoading}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm transition-colors disabled:opacity-50"
                               />
                             ) : (
                               <div>
@@ -591,16 +703,32 @@ const handleSubmit = async () => {
                                       e
                                     )
                                   }
+                                  disabled={isLoading || uploadProgress[`${currentModuleIndex}-${sectionIndex}`] !== undefined}
                                   className="block w-full text-sm text-gray-500
                                   file:mr-4 file:py-2 file:px-4
                                   file:rounded-md file:border-0
                                   file:text-sm file:font-semibold
                                   file:bg-green-100 file:text-green-700
-                                  hover:file:bg-green-200 file:transition-colors"
+                                  hover:file:bg-green-200 file:transition-colors
+                                  disabled:opacity-50"
                                 />
-                                {section.videoFile && (
+                                
+                                {uploadProgress[`${currentModuleIndex}-${sectionIndex}`] !== undefined && (
+                                  <div className="mt-2 text-sm text-blue-600 bg-blue-50 p-2 rounded flex items-center gap-2">
+                                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
+                                    Uploading video to Firebase Storage...
+                                  </div>
+                                )}
+                                
+                                {section.videoFile && section.videoDownloadUrl && (
                                   <div className="mt-2 text-sm text-gray-600 bg-green-50 p-2 rounded">
-                                    Selected: {section.videoFile.name} ({(section.videoFile.size / 1024 / 1024).toFixed(2)} MB)
+                                    ✅ Uploaded: {section.videoFile.name} ({(section.videoFile.size / 1024 / 1024).toFixed(2)} MB)
+                                  </div>
+                                )}
+                                
+                                {section.videoFile && !section.videoDownloadUrl && !uploadProgress[`${currentModuleIndex}-${sectionIndex}`] && (
+                                  <div className="mt-2 text-sm text-red-600 bg-red-50 p-2 rounded">
+                                    ❌ Upload failed. Please try again.
                                   </div>
                                 )}
                               </div>
@@ -613,7 +741,8 @@ const handleSubmit = async () => {
                     <button
                       type="button"
                       onClick={() => addSection(currentModuleIndex)}
-                      className="flex items-center gap-2 px-3 py-1 text-sm bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
+                      disabled={isLoading}
+                      className="flex items-center gap-2 px-3 py-1 text-sm bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Plus className="h-4 w-4" />
                       Add Section
@@ -630,7 +759,8 @@ const handleSubmit = async () => {
                     <button
                       type="button"
                       onClick={() => addQuiz(currentModuleIndex)}
-                      className="flex items-center gap-2 px-3 py-1 text-sm bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
+                      disabled={isLoading}
+                      className="flex items-center gap-2 px-3 py-1 text-sm bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Plus className="h-4 w-4" />
                       Add Quiz
@@ -654,7 +784,8 @@ const handleSubmit = async () => {
                                 onClick={() =>
                                   removeQuiz(currentModuleIndex, quizIndex)
                                 }
-                                className="text-red-500 hover:text-red-700 p-1 rounded transition-colors"
+                                disabled={isLoading}
+                                className="text-red-500 hover:text-red-700 p-1 rounded transition-colors disabled:opacity-50"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </button>
@@ -676,7 +807,8 @@ const handleSubmit = async () => {
                                     e.target.value
                                   )
                                 }
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm transition-colors"
+                                disabled={isLoading}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm transition-colors disabled:opacity-50"
                                 placeholder="Enter quiz question"
                               />
                             </div>
@@ -704,7 +836,8 @@ const handleSubmit = async () => {
                                           optionIndex
                                         )
                                       }
-                                      className="h-4 w-4 text-green-600 focus:ring-green-500"
+                                      disabled={isLoading}
+                                      className="h-4 w-4 text-green-600 focus:ring-green-500 disabled:opacity-50"
                                     />
                                     <input
                                       type="text"
@@ -717,7 +850,8 @@ const handleSubmit = async () => {
                                           e.target.value
                                         )
                                       }
-                                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm transition-colors"
+                                      disabled={isLoading}
+                                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm transition-colors disabled:opacity-50"
                                       placeholder={`Option ${optionIndex + 1}`}
                                     />
                                   </div>
@@ -736,7 +870,8 @@ const handleSubmit = async () => {
             <div className="sticky bottom-0 bg-white p-4 border-t border-gray-200 flex justify-end rounded-b-xl">
               <button
                 onClick={() => setShowModulePopup(false)}
-                className="bg-[#00491e] hover:bg-green-700 text-white font-medium py-2 px-6 rounded-lg transition-colors shadow-sm"
+                disabled={isLoading}
+                className="bg-[#00491e] hover:bg-green-700 text-white font-medium py-2 px-6 rounded-lg transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Done
               </button>

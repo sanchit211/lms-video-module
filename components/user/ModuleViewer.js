@@ -178,7 +178,7 @@ export default function ModuleViewer({ course: propCourse, onBack }) {
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex">
           <div className="bg-white w-80 h-full overflow-y-auto p-4 shadow-xl">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-gray-900">Course Modules</h2>
+              <h2 className="text-xl font-bold text-gray-900">Training Modules</h2>
               <button
                 onClick={() => setShowModuleList(false)}
                 className="p-2 rounded-full hover:bg-gray-100"
@@ -219,7 +219,7 @@ export default function ModuleViewer({ course: propCourse, onBack }) {
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Progress Section */}
-        <div className="bg-white rounded-xl p-6 mb-6 shadow-sm border border-gray-200">
+        {/* <div className="bg-white rounded-xl p-6 mb-6 shadow-sm border border-gray-200">
           <div className="flex justify-between items-center mb-3">
             <h2 className="text-lg font-semibold text-gray-900">
               {currentModule.title || `Module ${currentModuleIdx + 1}`}
@@ -237,7 +237,7 @@ export default function ModuleViewer({ course: propCourse, onBack }) {
           <p className="text-sm text-gray-500">
             Section {currentSectionIdx + 1} of {currentModule.sections.length}: {currentSection.title}
           </p>
-        </div>
+        </div> */}
 
         {/* Navigation Buttons */}
         <div className="flex justify-between mb-6">

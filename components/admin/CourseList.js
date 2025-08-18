@@ -1,29 +1,92 @@
 'use client';
 
 import { useAuth } from '../../context/AuthContext';
-import { BookOpen, ChevronDown, ChevronUp, Trash2, Users, PlayCircle, FileVideo } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronUp, Trash2, Users, PlayCircle, FileVideo, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { db } from '@/app/firebaseConfig';
+import { collection, getDocs, deleteDoc, doc, query, orderBy, onSnapshot } from 'firebase/firestore';
 
 export default function CourseList() {
-  const { user, courses: contextCourses, 
-    deleteCourse: contextDeleteCourse, deleteCourse } = useAuth();
-
-  const [localCourses, setLocalCourses] = useState([]);
+  const { user } = useAuth();
+  const [courses, setCourses] = useState([]);
   const [expandedModules, setExpandedModules] = useState({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  // Load courses from local storage on mount
-useEffect(() => {
-    const savedCourses = JSON.parse(localStorage.getItem('courses') || '[]');
+  // Load courses from Firebase on mount and set up real-time listener
+  useEffect(() => {
+    const loadCoursesFromFirebase = async () => {
+      try {
+        setIsLoading(true);
+        setError("");
+        
+        // Create a query to get courses ordered by creation date (newest first)
+        const coursesQuery = query(
+          collection(db, "courses"), 
+          orderBy("createdAt", "desc")
+        );
+        
+        // Set up real-time listener
+        const unsubscribe = onSnapshot(coursesQuery, (snapshot) => {
+          const coursesList = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          
+          setCourses(coursesList);
+          setIsLoading(false);
+          console.log("Loaded courses from Firebase:", coursesList);
+        }, (error) => {
+          console.error("Error loading courses from Firebase:", error);
+          setError("Failed to load courses from database.");
+          setIsLoading(false);
+        });
+
+        // Return cleanup function
+        return unsubscribe;
+      } catch (error) {
+        console.error("Error setting up Firebase listener:", error);
+        setError("Failed to connect to database.");
+        setIsLoading(false);
+      }
+    };
+
+    const unsubscribe = loadCoursesFromFirebase();
     
-    // Use context courses if they exist, otherwise fall back to localStorage
-    if (contextCourses && contextCourses.length > 0) {
-      setLocalCourses(contextCourses);
-    } else {
-      setLocalCourses(savedCourses);
-    }
-  }, [contextCourses]);
+    // Cleanup function
+    return () => {
+      if (unsubscribe && typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, []);
 
-  console.log("saved coures in listing", localCourses)
+  // Manual refresh function
+  const refreshCourses = async () => {
+    try {
+      setIsLoading(true);
+      setError("");
+      
+      const coursesQuery = query(
+        collection(db, "courses"), 
+        orderBy("createdAt", "desc")
+      );
+      
+      const coursesSnapshot = await getDocs(coursesQuery);
+      const coursesList = coursesSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      setCourses(coursesList);
+      console.log("Refreshed courses from Firebase:", coursesList);
+    } catch (error) {
+      console.error("Error refreshing courses:", error);
+      setError("Failed to refresh courses from database.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const toggleModule = (courseId, moduleIndex) => {
     setExpandedModules((prev) => ({
@@ -51,20 +114,40 @@ useEffect(() => {
 
   // Filter courses based on the logged-in user
   const filteredCourses = user?.role === 'admin'
-    ? localCourses
-    : localCourses.filter((course) =>
+    ? courses
+    : courses.filter((course) =>
         course.assignedUsers?.includes(user?.username)
       );
 
-  // Handle course deletion (update local storage)
-  const handleDeleteCourse = (courseId) => {
+  // Handle course deletion from Firebase
+  const handleDeleteCourse = async (courseId) => {
     if (window.confirm('Are you sure you want to delete this training?')) {
-      const updatedCourses = localCourses.filter((course) => course.id !== courseId);
-      localStorage.setItem('courses', JSON.stringify(updatedCourses));
-      setLocalCourses(updatedCourses);
-      deleteCourse(courseId); // Call context's deleteCourse for additional logic
+      try {
+        setIsLoading(true);
+        
+        // Delete from Firebase
+        await deleteDoc(doc(db, "courses", courseId));
+        
+        // Update local state immediately for better UX
+        setCourses(prevCourses => prevCourses.filter(course => course.id !== courseId));
+        
+        console.log("Course deleted successfully from Firebase");
+      } catch (error) {
+        console.error("Error deleting course from Firebase:", error);
+        setError("Failed to delete course. Please try again.");
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
+
+  // Loading spinner component
+  const LoadingSpinner = () => (
+    <div className="flex items-center justify-center py-12">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+      <span className="ml-3 text-gray-600">Loading courses...</span>
+    </div>
+  );
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
@@ -76,10 +159,35 @@ useEffect(() => {
             {filteredCourses.length}
           </span>
         </h2>
+        
+        <button
+          onClick={refreshCourses}
+          disabled={isLoading}
+          className="flex items-center gap-2 px-3 py-1 text-sm bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Refresh courses"
+        >
+          <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          Refresh
+        </button>
       </div>
 
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg flex items-center gap-2">
+          <span>⚠️</span>
+          <span>{error}</span>
+          <button
+            onClick={() => setError("")}
+            className="ml-auto text-red-500 hover:text-red-700"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       <div className="space-y-4 max-h-[calc(100vh-300px)] overflow-y-auto">
-        {filteredCourses.length === 0 ? (
+        {isLoading && courses.length === 0 ? (
+          <LoadingSpinner />
+        ) : filteredCourses.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
             <div className="bg-green-50 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
               <BookOpen className="h-8 w-8 text-green-400" />
@@ -90,9 +198,7 @@ useEffect(() => {
             </p>
           </div>
         ) : (
-         [...filteredCourses]
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      .map((course) => (
+          filteredCourses.map((course) => (
             <div
               key={course.id}
               className="border border-gray-200 rounded-lg p-4 hover:shadow-md hover:border-green-300 transition-all duration-200 bg-white"
@@ -113,13 +219,25 @@ useEffect(() => {
                       <span>📚</span>
                       <span className="font-medium">{getCourseModules(course).length} modules</span>
                     </div>
+                    {course.createdAt && (
+                      <div className="flex items-center gap-1 bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
+                        <span>📅</span>
+                        <span className="font-medium">
+                          {course.createdAt.toDate ? 
+                            course.createdAt.toDate().toLocaleDateString() : 
+                            new Date(course.createdAt).toLocaleDateString()
+                          }
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {user?.role === 'admin' && (
                   <button
                     onClick={() => handleDeleteCourse(course.id)}
-                    className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition-colors ml-4"
+                    disabled={isLoading}
+                    className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition-colors ml-4 disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Delete training"
                   >
                     <Trash2 className="h-5 w-5" />
@@ -263,6 +381,16 @@ useEffect(() => {
           ))
         )}
       </div>
+
+      {/* Loading overlay for operations */}
+      {isLoading && courses.length > 0 && (
+        <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center rounded-xl">
+          <div className="flex items-center gap-2 text-green-600">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-green-600"></div>
+            <span>Updating...</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

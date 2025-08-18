@@ -2,6 +2,8 @@
 
 import { ChevronRight, BookOpen } from 'lucide-react';
 
+
+
 export default function CourseCard({ course, onClick }) {
   // Calculate total sections across all modules
   const totalSections = course.modules?.reduce(

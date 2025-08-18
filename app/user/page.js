@@ -1,16 +1,40 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { redirect } from 'next/navigation';
 import { useAuth } from '../../context/AuthContext';
 import CourseCard from '../../components/user/CourseCard';
 import ModuleViewer from '../../components/user/ModuleViewer';
 import { BookOpen, LogOut } from 'lucide-react';
+import { db } from '@/app/firebaseConfig';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 
 export default function UserPage() {
-  const { user, getUserCourses, logout } = useAuth();
+  const { user, logout } = useAuth();
+  const [courses, setCourses] = useState([]);
   const [selectedCourse, setSelectedCourse] = useState(null);
-  const userCourses = getUserCourses(user?.username);
+
+  useEffect(() => {
+    if (!user) return;
+
+    // Listen to Firestore in real-time
+    const q = query(collection(db, 'courses'), orderBy('title'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const courseData = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      // Filter only the courses assigned to the logged-in user
+      const userCourses = courseData.filter((course) =>
+        course.assignedUsers?.includes(user.username)
+      );
+
+      setCourses(userCourses);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   if (!user) {
     redirect('/');
@@ -45,7 +69,7 @@ export default function UserPage() {
         </header>
 
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {userCourses.length === 0 ? (
+          {courses.length === 0 ? (
             <div className="text-center py-12">
               <BookOpen className="mx-auto h-16 w-16 text-gray-300 mb-4" />
               <h2 className="text-xl font-semibold text-gray-900 mb-2">No Trainings Assigned</h2>
@@ -53,9 +77,9 @@ export default function UserPage() {
             </div>
           ) : (
             <div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-6">Available Trainings ({userCourses.length})</h2>
+              <h2 className="text-xl font-semibold text-gray-900 mb-6">Available Trainings ({courses.length})</h2>
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {userCourses.map((course) => {
+                {courses.map((course) => {
                   // Calculate total sections across all modules
                   const totalSections = course.modules?.reduce(
                     (sum, module) => sum + (module.sections?.length || 0), 

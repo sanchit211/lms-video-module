@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import CourseForm from '../../components/admin/CourseForm';
 import CourseList from '../../components/admin/CourseList';
 import { Play, Plus, User, BookOpen, LogOut, Upload, Trash2, ChevronRight } from 'lucide-react';
+import Image from 'next/image';
 
 export default function AdminPage() {
   const { user, logout } = useAuth();
@@ -24,7 +25,13 @@ export default function AdminPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center gap-3">
-              <BookOpen className="h-8 w-8 text-indigo-600" />
+             <Image
+                   src="/subway_navbar_logo.png"   // place image in public/my-logo.png
+                   alt="Logo"
+                   width={102}
+                   height={62}
+                   className="rounded-lg"
+                 />
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
                 <p className="text-sm text-gray-600">Welcome, {user?.username}</p>

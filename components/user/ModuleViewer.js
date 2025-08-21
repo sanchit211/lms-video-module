@@ -16,10 +16,24 @@ import {
   Volume2,
   Maximize,
   RotateCcw,
-  Home
+  Home,
+  AlertCircle
 } from "lucide-react";
 
-export default function ModuleViewer({ course: propCourse, onBack }) {
+// Firebase imports
+import { db } from "@/app/firebaseConfig";
+import { 
+  collection, 
+  getDocs, 
+  doc, 
+  getDoc, 
+  setDoc, 
+  query, 
+  orderBy, 
+  onSnapshot 
+} from 'firebase/firestore';
+
+export default function ModuleViewer({ course: propCourse, courseId, onBack }) {
   const [currentModuleIdx, setCurrentModuleIdx] = useState(0);
   const [currentSectionIdx, setCurrentSectionIdx] = useState(0);
   const [quizAnswers, setQuizAnswers] = useState([]);
@@ -28,17 +42,174 @@ export default function ModuleViewer({ course: propCourse, onBack }) {
   const [showModuleList, setShowModuleList] = useState(false);
   const [showCorrectAnswers, setShowCorrectAnswers] = useState(false);
   const [activeCourse, setActiveCourse] = useState(propCourse);
+  const [completedSectionsCount, setCompletedSectionsCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
+  // Firebase data fetching
   useEffect(() => {
-    if (!propCourse) {
-      // Note: In production, you should get this from your Firebase instead of localStorage
-      const savedCourses = JSON.parse(localStorage.getItem("courses") || "[]");
-      if (savedCourses.length > 0) {
-        setActiveCourse(savedCourses[0]);
+    const fetchCourseData = async () => {
+      if (propCourse) {
+        setActiveCourse(propCourse);
+        return;
       }
-    }
-  }, [propCourse]);
 
+      if (!courseId) {
+        // If no courseId provided, try to fetch the first available course
+        await fetchFirstAvailableCourse();
+        return;
+      }
+
+      // Fetch specific course by ID
+      setLoading(true);
+      setError(null);
+      
+      try {
+        const courseRef = doc(db, 'courses', courseId);
+        const courseSnap = await getDoc(courseRef);
+        
+        if (courseSnap.exists()) {
+          const courseData = { id: courseSnap.id, ...courseSnap.data() };
+          setActiveCourse(courseData);
+        } else {
+          setError("Course not found");
+          await fetchFirstAvailableCourse();
+        }
+      } catch (err) {
+        console.error("Error fetching course:", err);
+        setError("Failed to load course data");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCourseData();
+  }, [propCourse, courseId]);
+
+  // Fetch first available course as fallback
+  const fetchFirstAvailableCourse = async () => {
+    try {
+      setLoading(true);
+      const coursesRef = collection(db, 'courses');
+      const q = query(coursesRef, orderBy('createdAt', 'desc'));
+      const querySnapshot = await getDocs(q);
+      
+      if (!querySnapshot.empty) {
+        const firstCourse = querySnapshot.docs[0];
+        const courseData = { id: firstCourse.id, ...firstCourse.data() };
+        setActiveCourse(courseData);
+      } else {
+        setError("No courses available");
+      }
+    } catch (err) {
+      console.error("Error fetching courses:", err);
+      setError("Failed to load courses");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Save progress to Firebase
+// Save progress to Firebase
+const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, completedCount) => {
+  try {
+    // Create a simpler document ID without special characters
+    const docId = `${courseId}_${getCurrentUserId()}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const progressRef = doc(db, 'courseProgress', docId);
+    
+    const progressData = {
+      courseId: courseId,
+      userId: getCurrentUserId(),
+      currentModuleIndex: moduleIndex,
+      currentSectionIndex: sectionIndex,
+      completedSectionsCount: completedCount,
+      lastUpdated: new Date(),
+      progress: Math.min((completedCount / getTotalSections()) * 100, 100)
+    };
+
+    // Use setDoc without merge to create/overwrite the document
+    await setDoc(progressRef, progressData);
+    
+    console.log("Progress saved successfully!");
+  } catch (err) {
+    console.error("Error saving progress:", err);
+    // Continue without breaking the user experience
+  }
+};
+
+
+  // Load progress from Firebase
+  const loadProgressFromFirebase = async (courseId) => {
+    try {
+      const progressRef = doc(db, 'courseProgress', `${courseId}_${getCurrentUserId()}`);
+      const progressSnap = await getDoc(progressRef);
+      
+      if (progressSnap.exists()) {
+        const progressData = progressSnap.data();
+        setCurrentModuleIdx(progressData.currentModuleIndex || 0);
+        setCurrentSectionIdx(progressData.currentSectionIndex || 0);
+        setCompletedSectionsCount(progressData.completedSectionsCount || 0);
+      }
+    } catch (err) {
+      console.error("Error loading progress:", err);
+      // Continue with default values
+    }
+  };
+
+  // Simple user ID function - replace with your auth system
+  const getCurrentUserId = () => {
+    // This should return the actual authenticated user ID
+    // For demo purposes, using a simple approach
+    return localStorage.getItem('userId') || 'demo-user';
+  };
+
+  // Load user progress when course changes
+  useEffect(() => {
+    if (activeCourse?.id) {
+      loadProgressFromFirebase(activeCourse.id);
+    }
+  }, [activeCourse?.id]);
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+          <p className="text-gray-600 text-lg font-medium">Loading course data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50 flex items-center justify-center">
+        <div className="text-center bg-white rounded-2xl p-8 shadow-xl border border-gray-200 max-w-md">
+          <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Error Loading Course</h2>
+          <p className="text-gray-600 mb-6">{error}</p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            >
+              Retry
+            </button>
+            <button
+              onClick={onBack}
+              className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+            >
+              Go Back
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // No course available state
   if (!activeCourse) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50 flex items-center justify-center">
@@ -47,6 +218,12 @@ export default function ModuleViewer({ course: propCourse, onBack }) {
             <BookOpen className="h-12 w-12 text-gray-400" />
           </div>
           <p className="text-gray-600 text-lg">No course data available. Please create a course first.</p>
+          <button
+            onClick={onBack}
+            className="mt-4 px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+          >
+            Go Back
+          </button>
         </div>
       </div>
     );
@@ -56,16 +233,20 @@ export default function ModuleViewer({ course: propCourse, onBack }) {
   const currentSection = currentModule.sections[currentSectionIdx];
 
   // Calculate overall progress
-  const totalSections = activeCourse.modules.reduce(
-    (sum, module) => sum + module.sections.length,
-    0
-  );
+  const getTotalSections = () => {
+    return activeCourse.modules.reduce(
+      (sum, module) => sum + module.sections.length,
+      0
+    );
+  };
+
+  const totalSections = getTotalSections();
   const completedSections =
     activeCourse.modules
       .slice(0, currentModuleIdx)
       .reduce((sum, module) => sum + module.sections.length, 0) +
     currentSectionIdx;
-  const progress = (completedSections / totalSections) * 100;
+  const progress = Math.min((completedSectionsCount / totalSections) * 100, 100);
 
   const isLastSection = currentSectionIdx === currentModule.sections.length - 1;
   const isLastModule = currentModuleIdx === activeCourse.modules.length - 1;
@@ -93,36 +274,86 @@ export default function ModuleViewer({ course: propCourse, onBack }) {
     if (allCorrect) {
       setQuizPassed(true);
       setShowCorrectAnswers(false);
+      
+      // Mark sections as completed when quiz is passed
+      const currentSections = activeCourse.modules
+        .slice(0, currentModuleIdx)
+        .reduce((sum, module) => sum + module.sections.length, 0) + currentModule.sections.length;
+      setCompletedSectionsCount(currentSections);
+      
+      // Save progress to Firebase
+      if (activeCourse.id) {
+        saveProgressToFirebase(activeCourse.id, currentModuleIdx, currentSectionIdx, currentSections);
+      }
     } else {
       setShowCorrectAnswers(true);
     }
   };
 
-  const handleOptionSelect = (questionIndex, optionIndex) => {
-    setQuizAnswers((prev) => {
-      const updated = [...prev];
-      updated[questionIndex] = optionIndex;
-      return updated;
-    });
-  };
+  const goToNext = async () => {
+    // Only mark as completed if there's no quiz requirement OR quiz is passed
+    const currentSections = activeCourse.modules
+      .slice(0, currentModuleIdx)
+      .reduce((sum, module) => sum + module.sections.length, 0) + currentSectionIdx + 1;
+      
+    let newModuleIdx = currentModuleIdx;
+    let newSectionIdx = currentSectionIdx;
 
-  const goToNext = () => {
-    if (!isLastSection) {
-      setCurrentSectionIdx(currentSectionIdx + 1);
-    } else if (!isLastModule) {
-      setCurrentModuleIdx(currentModuleIdx + 1);
-      setCurrentSectionIdx(0);
+    if (isLastSection) {
+      // If it's the last section of a module, check if quiz is required
+      if (currentModule.quizzes && currentModule.quizzes.length > 0) {
+        // Don't mark as completed yet - wait for quiz completion
+        // Only update completed count if quiz is passed
+        if (quizPassed) {
+          setCompletedSectionsCount(currentSections);
+        }
+      } else {
+        // No quiz required, mark as completed
+        setCompletedSectionsCount(currentSections);
+      }
+    } else {
+      // Regular section navigation - mark previous as completed
+      setCompletedSectionsCount(currentSections);
     }
+
+    // Navigate to next section/module
+    if (!isLastSection) {
+      newSectionIdx = currentSectionIdx + 1;
+      setCurrentSectionIdx(newSectionIdx);
+    } else if (!isLastModule) {
+      newModuleIdx = currentModuleIdx + 1;
+      newSectionIdx = 0;
+      setCurrentModuleIdx(newModuleIdx);
+      setCurrentSectionIdx(newSectionIdx);
+    }
+
+    // Save progress to Firebase
+    if (activeCourse.id) {
+      await saveProgressToFirebase(activeCourse.id, newModuleIdx, newSectionIdx, currentSections);
+    }
+
     resetQuizState();
   };
 
-  const goToPrevious = () => {
+  const goToPrevious = async () => {
+    let newModuleIdx = currentModuleIdx;
+    let newSectionIdx = currentSectionIdx;
+
     if (currentSectionIdx > 0) {
-      setCurrentSectionIdx(currentSectionIdx - 1);
+      newSectionIdx = currentSectionIdx - 1;
+      setCurrentSectionIdx(newSectionIdx);
     } else if (currentModuleIdx > 0) {
-      setCurrentModuleIdx(currentModuleIdx - 1);
-      setCurrentSectionIdx(activeCourse.modules[currentModuleIdx - 1].sections.length - 1);
+      newModuleIdx = currentModuleIdx - 1;
+      newSectionIdx = activeCourse.modules[currentModuleIdx - 1].sections.length - 1;
+      setCurrentModuleIdx(newModuleIdx);
+      setCurrentSectionIdx(newSectionIdx);
     }
+
+    // Save progress to Firebase
+    if (activeCourse.id && (newModuleIdx !== currentModuleIdx || newSectionIdx !== currentSectionIdx)) {
+      await saveProgressToFirebase(activeCourse.id, newModuleIdx, newSectionIdx, completedSectionsCount);
+    }
+
     resetQuizState();
   };
 
@@ -133,9 +364,15 @@ export default function ModuleViewer({ course: propCourse, onBack }) {
     setShowCorrectAnswers(false);
   };
 
-  const selectModule = (moduleIndex) => {
+  const selectModule = async (moduleIndex) => {
     setCurrentModuleIdx(moduleIndex);
     setCurrentSectionIdx(0);
+    
+    // Save progress to Firebase
+    if (activeCourse.id) {
+      await saveProgressToFirebase(activeCourse.id, moduleIndex, 0, completedSectionsCount);
+    }
+    
     resetQuizState();
     setShowModuleList(false);
   };
@@ -171,6 +408,14 @@ export default function ModuleViewer({ course: propCourse, onBack }) {
 
   const embedUrl = currentSection.videoUrl ? getEmbedUrl(currentSection.videoUrl) : null;
   const base64Url = currentSection.videoBase64 ? { type: "local", url: currentSection.videoBase64 } : null;
+
+  const handleOptionSelect = (questionIndex, optionIndex) => {
+    setQuizAnswers((prev) => {
+      const updated = [...prev];
+      updated[questionIndex] = optionIndex;
+      return updated;
+    });
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50">
@@ -229,6 +474,7 @@ export default function ModuleViewer({ course: propCourse, onBack }) {
         </div>
       </header>
 
+      {/* Rest of the component remains the same as the original */}
       {/* Enhanced Module List Sidebar */}
       {showModuleList && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex">

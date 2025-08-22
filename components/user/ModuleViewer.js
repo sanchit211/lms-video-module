@@ -46,6 +46,15 @@ export default function ModuleViewer({ course: propCourse, courseId, onBack }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // THEME
+  const SOLID = "#00491e";
+  const GRADIENT = "from-green-500 to-teal-600";
+  const gradientClass = `bg-gradient-to-r ${GRADIENT}`;
+  const gradientBrClass = `bg-gradient-to-br ${GRADIENT}`;
+
+  // Simple modal state for "View status"
+  const [showStatusModal, setShowStatusModal] = useState(false);
+
   // Firebase data fetching
   useEffect(() => {
     const fetchCourseData = async () => {
@@ -55,12 +64,10 @@ export default function ModuleViewer({ course: propCourse, courseId, onBack }) {
       }
 
       if (!courseId) {
-        // If no courseId provided, try to fetch the first available course
         await fetchFirstAvailableCourse();
         return;
       }
 
-      // Fetch specific course by ID
       setLoading(true);
       setError(null);
       
@@ -86,7 +93,6 @@ export default function ModuleViewer({ course: propCourse, courseId, onBack }) {
     fetchCourseData();
   }, [propCourse, courseId]);
 
-  // Fetch first available course as fallback
   const fetchFirstAvailableCourse = async () => {
     try {
       setLoading(true);
@@ -109,36 +115,28 @@ export default function ModuleViewer({ course: propCourse, courseId, onBack }) {
     }
   };
 
-  // Save progress to Firebase
-// Save progress to Firebase
-const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, completedCount) => {
-  try {
-    // Create a simpler document ID without special characters
-    const docId = `${courseId}_${getCurrentUserId()}`.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const progressRef = doc(db, 'courseProgress', docId);
-    
-    const progressData = {
-      courseId: courseId,
-      userId: getCurrentUserId(),
-      currentModuleIndex: moduleIndex,
-      currentSectionIndex: sectionIndex,
-      completedSectionsCount: completedCount,
-      lastUpdated: new Date(),
-      progress: Math.min((completedCount / getTotalSections()) * 100, 100)
-    };
+  const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, completedCount) => {
+    try {
+      const docId = `${courseId}_${getCurrentUserId()}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const progressRef = doc(db, 'courseProgress', docId);
+      
+      const progressData = {
+        courseId: courseId,
+        userId: getCurrentUserId(),
+        currentModuleIndex: moduleIndex,
+        currentSectionIndex: sectionIndex,
+        completedSectionsCount: completedCount,
+        lastUpdated: new Date(),
+        progress: Math.min((completedCount / getTotalSections()) * 100, 100)
+      };
 
-    // Use setDoc without merge to create/overwrite the document
-    await setDoc(progressRef, progressData);
-    
-    console.log("Progress saved successfully!");
-  } catch (err) {
-    console.error("Error saving progress:", err);
-    // Continue without breaking the user experience
-  }
-};
+      await setDoc(progressRef, progressData);
+      console.log("Progress saved successfully!");
+    } catch (err) {
+      console.error("Error saving progress:", err);
+    }
+  };
 
-
-  // Load progress from Firebase
   const loadProgressFromFirebase = async (courseId) => {
     try {
       const progressRef = doc(db, 'courseProgress', `${courseId}_${getCurrentUserId()}`);
@@ -152,54 +150,49 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
       }
     } catch (err) {
       console.error("Error loading progress:", err);
-      // Continue with default values
     }
   };
 
-  // Simple user ID function - replace with your auth system
   const getCurrentUserId = () => {
-    // This should return the actual authenticated user ID
-    // For demo purposes, using a simple approach
     return localStorage.getItem('userId') || 'demo-user';
   };
 
-  // Load user progress when course changes
   useEffect(() => {
     if (activeCourse?.id) {
       loadProgressFromFirebase(activeCourse.id);
     }
   }, [activeCourse?.id]);
 
-  // Loading state
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+          <div className="w-16 h-16 border-4 rounded-full animate-spin mb-4" style={{ borderColor: SOLID, borderTopColor: "transparent" }}></div>
           <p className="text-gray-600 text-lg font-medium">Loading course data...</p>
         </div>
       </div>
     );
   }
 
-  // Error state
   if (error) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50 flex items-center justify-center">
-        <div className="text-center bg-white rounded-2xl p-8 shadow-xl border border-gray-200 max-w-md">
-          <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+        <div className="text-center bg-white rounded-2xl p-8 shadow-xl border" style={{ borderColor: SOLID }}>
+          <AlertCircle className="h-16 w-16 mx-auto mb-4" style={{ color: SOLID }} />
           <h2 className="text-xl font-bold text-gray-900 mb-2">Error Loading Course</h2>
           <p className="text-gray-600 mb-6">{error}</p>
           <div className="flex gap-3 justify-center">
             <button
               onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              className="px-4 py-2 text-white rounded-lg transition-colors"
+              style={{ backgroundColor: SOLID }}
             >
               Retry
             </button>
             <button
               onClick={onBack}
-              className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+              className="px-4 py-2 text-white rounded-lg transition-colors"
+              style={{ backgroundColor: SOLID }}
             >
               Go Back
             </button>
@@ -209,18 +202,18 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
     );
   }
 
-  // No course available state
   if (!activeCourse) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-24 h-24 bg-gradient-to-br from-gray-200 to-gray-300 rounded-3xl mx-auto mb-6 flex items-center justify-center">
-            <BookOpen className="h-12 w-12 text-gray-400" />
+          <div className="w-24 h-24 rounded-3xl mx-auto mb-6 flex items-center justify-center" style={{ backgroundColor: SOLID }}>
+            <BookOpen className="h-12 w-12 text-white" />
           </div>
           <p className="text-gray-600 text-lg">No course data available. Please create a course first.</p>
           <button
             onClick={onBack}
-            className="mt-4 px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            className="mt-4 px-6 py-2 text-white rounded-lg transition-colors"
+            style={{ backgroundColor: SOLID }}
           >
             Go Back
           </button>
@@ -232,7 +225,6 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
   const currentModule = activeCourse.modules[currentModuleIdx];
   const currentSection = currentModule.sections[currentSectionIdx];
 
-  // Calculate overall progress
   const getTotalSections = () => {
     return activeCourse.modules.reduce(
       (sum, module) => sum + module.sections.length,
@@ -246,26 +238,35 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
       .slice(0, currentModuleIdx)
       .reduce((sum, module) => sum + module.sections.length, 0) +
     currentSectionIdx;
+
+  // Display progress (clamped for the bar)
   const progress = Math.min((completedSectionsCount / totalSections) * 100, 100);
+
+  // Status logic based on RAW value (not clamped), per your requirement
+  const rawProgress = totalSections > 0 ? (completedSectionsCount / totalSections) * 100 : 0;
+
+  const statusFromProgress = (value) => {
+    if (value === 0) return "not_started";
+    if (value === 100) return "completed";
+    return "in_progress";
+  };
+
+  const status = statusFromProgress(rawProgress);
+  const statusMeta = (() => {
+    switch (status) {
+      case "not_started":
+        return { label: "Not started", icon: "⏳", className: "text-white", style: { backgroundColor: SOLID } };
+      case "in_progress":
+        return { label: "In progress", icon: "🚧", className: "text-white", style: { backgroundColor: SOLID } };
+      case "completed":
+        return { label: "You have successfully completed the training", icon: "✅", className: "text-white", classGradient: gradientClass };
+      default:
+        return { label: "In progress", icon: "🚧", className: "text-white", style: { backgroundColor: SOLID } };
+    }
+  })();
 
   const isLastSection = currentSectionIdx === currentModule.sections.length - 1;
   const isLastModule = currentModuleIdx === activeCourse.modules.length - 1;
-
-  // Generate consistent gradient for course
-  const getGradientFromTitle = (title) => {
-    const gradients = [
-      "from-blue-500 to-purple-600",
-      "from-green-500 to-teal-600", 
-      "from-orange-500 to-red-600",
-      "from-pink-500 to-rose-600",
-      "from-indigo-500 to-blue-600",
-      "from-purple-500 to-pink-600"
-    ];
-    const hash = title.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
-    return gradients[hash % gradients.length];
-  };
-
-  const gradient = getGradientFromTitle(activeCourse.title);
 
   const handleQuizSubmit = () => {
     const quizQuestions = currentModule.quizzes || [];
@@ -274,14 +275,10 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
     if (allCorrect) {
       setQuizPassed(true);
       setShowCorrectAnswers(false);
-      
-      // Mark sections as completed when quiz is passed
       const currentSections = activeCourse.modules
         .slice(0, currentModuleIdx)
         .reduce((sum, module) => sum + module.sections.length, 0) + currentModule.sections.length;
       setCompletedSectionsCount(currentSections);
-      
-      // Save progress to Firebase
       if (activeCourse.id) {
         saveProgressToFirebase(activeCourse.id, currentModuleIdx, currentSectionIdx, currentSections);
       }
@@ -291,7 +288,6 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
   };
 
   const goToNext = async () => {
-    // Only mark as completed if there's no quiz requirement OR quiz is passed
     const currentSections = activeCourse.modules
       .slice(0, currentModuleIdx)
       .reduce((sum, module) => sum + module.sections.length, 0) + currentSectionIdx + 1;
@@ -300,23 +296,17 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
     let newSectionIdx = currentSectionIdx;
 
     if (isLastSection) {
-      // If it's the last section of a module, check if quiz is required
       if (currentModule.quizzes && currentModule.quizzes.length > 0) {
-        // Don't mark as completed yet - wait for quiz completion
-        // Only update completed count if quiz is passed
         if (quizPassed) {
           setCompletedSectionsCount(currentSections);
         }
       } else {
-        // No quiz required, mark as completed
         setCompletedSectionsCount(currentSections);
       }
     } else {
-      // Regular section navigation - mark previous as completed
       setCompletedSectionsCount(currentSections);
     }
 
-    // Navigate to next section/module
     if (!isLastSection) {
       newSectionIdx = currentSectionIdx + 1;
       setCurrentSectionIdx(newSectionIdx);
@@ -327,7 +317,6 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
       setCurrentSectionIdx(newSectionIdx);
     }
 
-    // Save progress to Firebase
     if (activeCourse.id) {
       await saveProgressToFirebase(activeCourse.id, newModuleIdx, newSectionIdx, currentSections);
     }
@@ -349,7 +338,6 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
       setCurrentSectionIdx(newSectionIdx);
     }
 
-    // Save progress to Firebase
     if (activeCourse.id && (newModuleIdx !== currentModuleIdx || newSectionIdx !== currentSectionIdx)) {
       await saveProgressToFirebase(activeCourse.id, newModuleIdx, newSectionIdx, completedSectionsCount);
     }
@@ -367,23 +355,18 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
   const selectModule = async (moduleIndex) => {
     setCurrentModuleIdx(moduleIndex);
     setCurrentSectionIdx(0);
-    
-    // Save progress to Firebase
     if (activeCourse.id) {
       await saveProgressToFirebase(activeCourse.id, moduleIndex, 0, completedSectionsCount);
     }
-    
     resetQuizState();
     setShowModuleList(false);
   };
 
   const getEmbedUrl = (url) => {
     if (!url) return null;
-
     if (url.match(/\.(mp4|webm|ogg)$/)) {
       return { type: "local", url };
     }
-
     if (url.includes("youtube.com") || url.includes("youtu.be")) {
       let videoId = "";
       if (url.includes("v=")) {
@@ -393,16 +376,14 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
           videoId = videoId.substring(0, ampersandPosition);
         }
       } else if (url.includes("youtu.be/")) {
-        videoId = url.split("youtu.be/")[1];
+        videoId = url.split("youtu.be/");
       }
       return { type: "youtube", url: `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1` };
     }
-
     if (url.includes("vimeo.com")) {
-      const videoId = url.split("vimeo.com/")[1];
+      const videoId = url.split("vimeo.com/");
       return { type: "vimeo", url: `https://player.vimeo.com/video/${videoId}` };
     }
-
     return { type: "unknown", url };
   };
 
@@ -418,53 +399,80 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50">
-      {/* Enhanced Header */}
-      <header className="bg-white/80 backdrop-blur-xl shadow-lg border-b border-gray-200/50 sticky top-0 z-40">
+    <div className="min-h-screen" style={{ background: "linear-gradient(135deg, #f9fafb 0%, #ecfdf5 50%, #f0fdf4 100%)" }}>
+      {/* Header */}
+      <header className="bg-white/80 backdrop-blur-xl shadow-lg sticky top-0 z-40" style={{ borderBottom: `1px solid ${SOLID}20` }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center gap-4">
               <button
                 onClick={onBack}
-                className="group p-3 rounded-xl hover:bg-gradient-to-r hover:from-gray-100 hover:to-gray-200 transition-all duration-300 border border-gray-200 hover:border-gray-300 hover:shadow-md"
+                className="group p-3 rounded-xl transition-all duration-300 border"
+                style={{ borderColor: `${SOLID}33` }}
                 aria-label="Back to courses"
               >
-                <ChevronLeft className="h-5 w-5 text-gray-600 group-hover:text-gray-800 group-hover:scale-110 transition-all" />
+                <ChevronLeft className="h-5 w-5" style={{ color: SOLID }} />
               </button>
               <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+                <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-700 to-teal-700">
                   {activeCourse.title}
                 </h1>
                 <div className="flex items-center gap-4 mt-1">
-                  <p className="text-sm text-gray-600 font-medium">
+                  <p className="text-sm font-medium" style={{ color: SOLID }}>
                     Module {currentModuleIdx + 1} of {activeCourse.modules.length}
                   </p>
-                  <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
-                  <p className="text-sm text-gray-600 font-medium">
+                  <div className="w-1 h-1 rounded-full" style={{ backgroundColor: SOLID }}></div>
+                  <p className="text-sm font-medium" style={{ color: SOLID }}>
                     Section {currentSectionIdx + 1} of {currentModule.sections.length}
                   </p>
+                </div>
+
+                {/* Status row */}
+                <div className="mt-2 flex items-center gap-3">
+                  <span
+                    className={[
+                      "inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold",
+                      statusMeta.classGradient ? statusMeta.classGradient : "",
+                      statusMeta.className || ""
+                    ].join(" ")}
+                    style={statusMeta.style || {}}
+                    title="Training status"
+                  >
+                    <span>{statusMeta.icon}</span>
+                    <span>{statusMeta.label}</span>
+                  </span>
+
+                  <button
+                    type="button"
+                    className="px-3 py-1 rounded-full text-xs font-semibold text-white"
+                    style={{ backgroundColor: SOLID }}
+                    onClick={() => setShowStatusModal(true)}
+                  >
+                    View status
+                  </button>
                 </div>
               </div>
             </div>
             
             <button
               onClick={() => setShowModuleList(!showModuleList)}
-              className="flex items-center gap-2 px-6 py-3 text-sm font-medium text-gray-700 hover:text-white hover:bg-gradient-to-r hover:from-blue-500 hover:to-purple-600 rounded-xl transition-all duration-300 border border-gray-200 hover:border-transparent hover:shadow-lg group"
+              className={`flex items-center gap-2 px-6 py-3 text-sm font-medium rounded-xl transition-all duration-300 border ${gradientClass} text-white`}
+              style={{ borderColor: "transparent" }}
             >
-              <List className="h-4 w-4 group-hover:scale-110 transition-transform" />
+              <List className="h-4 w-4" />
               <span className="hidden md:inline">Modules</span>
             </button>
           </div>
           
-          {/* Enhanced Progress Bar */}
+          {/* Progress Bar */}
           <div className="pb-4">
             <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-semibold text-gray-700">Course Progress</span>
-              <span className="text-sm font-bold text-blue-600">{Math.round(progress)}%</span>
+              <span className="text-sm font-semibold" style={{ color: SOLID }}>Course Progress</span>
+              <span className="text-sm font-bold text-teal-700">{Math.round(progress)}%</span>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-3 shadow-inner">
+            <div className="w-full rounded-full h-3 shadow-inner" style={{ backgroundColor: `${SOLID}1A` }}>
               <div
-                className={`bg-gradient-to-r ${gradient} h-3 rounded-full transition-all duration-500 shadow-sm relative overflow-hidden`}
+                className={`h-3 rounded-full transition-all duration-500 shadow-sm relative overflow-hidden ${gradientClass}`}
                 style={{ width: `${progress}%` }}
               >
                 <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
@@ -474,22 +482,42 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
         </div>
       </header>
 
-      {/* Rest of the component remains the same as the original */}
-      {/* Enhanced Module List Sidebar */}
+      {/* Status Modal (simple example) */}
+      {showStatusModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 border" style={{ borderColor: `${SOLID}22` }}>
+            <h3 className="text-xl font-bold mb-2" style={{ color: SOLID }}>Training Status</h3>
+            <p className="mb-4" style={{ color: `${SOLID}CC` }}>
+              {statusMeta.label}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                className="px-4 py-2 rounded-lg text-white"
+                style={{ backgroundColor: SOLID }}
+                onClick={() => setShowStatusModal(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Module List Sidebar */}
       {showModuleList && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex">
           <div className="bg-white/95 backdrop-blur-xl w-96 h-full overflow-y-auto shadow-2xl">
-            <div className="sticky top-0 bg-white/80 backdrop-blur-xl p-6 border-b border-gray-200">
+            <div className="sticky top-0 bg-white/80 backdrop-blur-xl p-6" style={{ borderBottom: `1px solid ${SOLID}20` }}>
               <div className="flex justify-between items-center">
-                <h2 className="text-xl font-bold text-gray-900">Training Modules</h2>
+                <h2 className="text-xl font-bold" style={{ color: SOLID }}>Training Modules</h2>
                 <button
                   onClick={() => setShowModuleList(false)}
                   className="p-2 rounded-xl hover:bg-gray-100 transition-colors"
                 >
-                  <ChevronLeft className="h-5 w-5" />
+                  <ChevronLeft className="h-5 w-5" style={{ color: SOLID }} />
                 </button>
               </div>
-              <p className="text-sm text-gray-600 mt-2">{activeCourse.modules.length} modules available</p>
+              <p className="text-sm mt-2" style={{ color: `${SOLID}CC` }}>{activeCourse.modules.length} modules available</p>
             </div>
             
             <div className="p-6 space-y-4">
@@ -499,25 +527,28 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
                   onClick={() => selectModule(idx)}
                   className={`w-full text-left p-4 rounded-2xl transition-all duration-300 border-2 ${
                     currentModuleIdx === idx
-                      ? `bg-gradient-to-r ${gradient} text-white border-transparent shadow-lg scale-105`
-                      : "hover:bg-gray-50 text-gray-700 border-gray-200 hover:border-gray-300 hover:shadow-md"
+                      ? `${gradientClass} text-white border-transparent shadow-lg scale-105`
+                      : "hover:bg-gray-50 text-gray-700"
                   }`}
+                  style={currentModuleIdx === idx ? {} : { borderColor: `${SOLID}33` }}
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${
-                      currentModuleIdx === idx 
-                        ? "bg-white/20 text-white" 
-                        : "bg-gray-100 text-gray-600"
-                    }`}>
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${
+                        currentModuleIdx === idx ? "bg-white/20 text-white" : ""
+                      }`}
+                      style={currentModuleIdx === idx ? {} : { backgroundColor: `${SOLID}10`, color: SOLID }}
+                    >
                       {idx + 1}
                     </div>
                     <div className="flex-1">
-                      <div className="font-semibold">
+                      <div className="font-semibold" style={{ color: currentModuleIdx === idx ? "white" : SOLID }}>
                         {module.title || `Module ${idx + 1}`}
                       </div>
-                      <div className={`text-xs mt-1 flex items-center gap-2 ${
-                        currentModuleIdx === idx ? "text-white/80" : "text-gray-500"
-                      }`}>
+                      <div
+                        className={`text-xs mt-1 flex items-center gap-2`}
+                        style={{ color: currentModuleIdx === idx ? "rgba(255,255,255,0.8)" : `${SOLID}99` }}
+                      >
                         <Target className="h-3 w-3" />
                         {module.sections.length} sections
                         {module.quizzes && module.quizzes.length > 0 && (
@@ -536,38 +567,35 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
               ))}
             </div>
           </div>
-          <div
-            className="flex-1"
-            onClick={() => setShowModuleList(false)}
-          ></div>
+          <div className="flex-1" onClick={() => setShowModuleList(false)}></div>
         </div>
       )}
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Enhanced Progress Section */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-3xl p-8 mb-8 shadow-xl border border-white/50">
+        {/* Progress Section */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-3xl p-8 mb-8 shadow-xl" style={{ border: `1px solid ${SOLID}14` }}>
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-3">
-                <div className={`w-12 h-12 bg-gradient-to-br ${gradient} rounded-2xl flex items-center justify-center shadow-lg`}>
+                <div className={`w-12 h-12 ${gradientBrClass} rounded-2xl flex items-center justify-center shadow-lg`}>
                   <span className="text-white font-bold text-lg">{currentModuleIdx + 1}</span>
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900">
+                  <h2 className="text-2xl font-bold" style={{ color: SOLID }}>
                     {currentModule.title || `Module ${currentModuleIdx + 1}`}
                   </h2>
-                  <p className="text-gray-600 font-medium">
+                  <p className="font-medium" style={{ color: `${SOLID}CC` }}>
                     {currentSection.title || `Section ${currentSectionIdx + 1}`}
                   </p>
                 </div>
               </div>
               
-              <div className="flex items-center gap-6 text-sm text-gray-600">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-6 text-sm">
+                <div className="flex items-center gap-2" style={{ color: `${SOLID}CC` }}>
                   <Target className="h-4 w-4" />
                   <span>Section {currentSectionIdx + 1} of {currentModule.sections.length}</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2" style={{ color: `${SOLID}CC` }}>
                   <Clock className="h-4 w-4" />
                   <span>Est. {Math.floor(Math.random() * 10) + 5} min</span>
                 </div>
@@ -587,44 +615,44 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
                   <path
                     d="m18,2.0845 a 15.9155,15.9155 0 0,1 0,31.831 a 15.9155,15.9155 0 0,1 0,-31.831"
                     fill="none"
-                    stroke="url(#gradient)"
+                    stroke={`url(#ringGradient)`}
                     strokeWidth="2"
                     strokeDasharray={`${progress}, 100`}
                     className="transition-all duration-1000"
                   />
                   <defs>
-                    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#3b82f6" />
-                      <stop offset="100%" stopColor="#8b5cf6" />
+                    <linearGradient id="ringGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#22c55e" />
+                      <stop offset="100%" stopColor="#0d9488" />
                     </linearGradient>
                   </defs>
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-lg font-bold text-gray-900">{Math.round(progress)}%</span>
-                  <span className="text-xs text-gray-500 font-medium">Complete</span>
+                  <span className="text-lg font-bold" style={{ color: SOLID }}>{Math.round(progress)}%</span>
+                  <span className="text-xs font-medium" style={{ color: `${SOLID}99` }}>Complete</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Enhanced Navigation */}
+        {/* Navigation */}
         <div className="flex justify-between items-center mb-8">
           <button
             onClick={goToPrevious}
             disabled={currentModuleIdx === 0 && currentSectionIdx === 0}
-            className={`flex items-center gap-3 px-6 py-4 rounded-2xl text-sm font-semibold transition-all duration-300 ${
-              currentModuleIdx === 0 && currentSectionIdx === 0
-                ? "text-gray-400 cursor-not-allowed bg-gray-100"
-                : "text-white bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 shadow-lg hover:shadow-xl hover:scale-105"
-            }`}
+            className={`flex items-center gap-3 px-6 py-4 rounded-2xl text-sm font-semibold transition-all duration-300 text-white`}
+            style={{
+              backgroundColor: currentModuleIdx === 0 && currentSectionIdx === 0 ? `${SOLID}33` : SOLID,
+              cursor: currentModuleIdx === 0 && currentSectionIdx === 0 ? "not-allowed" : "pointer"
+            }}
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-4 w-4 text-white" />
             Previous
           </button>
 
-          <div className="flex items-center gap-3 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-full border border-gray-200">
-            <div className="text-sm font-medium text-gray-700">
+          <div className="flex items-center gap-3 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-full" style={{ border: `1px solid ${SOLID}33`, color: SOLID }}>
+            <div className="text-sm font-medium">
               {completedSections + 1} / {totalSections}
             </div>
           </div>
@@ -632,24 +660,24 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
           <button
             onClick={goToNext}
             disabled={isLastModule && isLastSection}
-            className={`flex items-center gap-3 px-6 py-4 rounded-2xl text-sm font-semibold transition-all duration-300 ${
-              isLastModule && isLastSection
-                ? "text-gray-400 cursor-not-allowed bg-gray-100"
-                : `text-white bg-gradient-to-r ${gradient} hover:shadow-xl hover:scale-105 shadow-lg`
-            }`}
+            className={`flex items-center gap-3 px-6 py-4 rounded-2xl text-sm font-semibold transition-all duration-300 text-white ${gradientClass}`}
+            style={{
+              opacity: isLastModule && isLastSection ? 0.5 : 1,
+              cursor: isLastModule && isLastSection ? "not-allowed" : "pointer"
+            }}
           >
             {isLastSection ? "Next Module" : "Next Section"}
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-4 w-4 text-white" />
           </button>
         </div>
 
-        {/* Enhanced Content Section */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/50 overflow-hidden">
+        {/* Content Section */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl border overflow-hidden" style={{ borderColor: `${SOLID}14` }}>
           {/* Section Header */}
-          <div className={`bg-gradient-to-r ${gradient} p-6 text-white relative overflow-hidden`}>
+          <div className={`${gradientClass} p-6 text-white relative overflow-hidden`}>
             <div className="absolute inset-0 bg-black/10"></div>
             <div className="absolute top-4 right-4 opacity-20">
-              <BookOpen className="h-16 w-16" />
+              <BookOpen className="h-16 w-16 text-white" />
             </div>
             <div className="relative">
               <h3 className="text-2xl font-bold mb-2">
@@ -674,7 +702,7 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
           <div className="p-8">
             {base64Url || embedUrl ? (
               <div className="relative">
-                <div className="aspect-video bg-gray-900 rounded-2xl overflow-hidden shadow-2xl mb-6 border-4 border-gray-200">
+                <div className="aspect-video bg-gray-900 rounded-2xl overflow-hidden shadow-2xl mb-6 border-4" style={{ borderColor: `${SOLID}22` }}>
                   {base64Url?.type === "local" || embedUrl?.type === "local" ? (
                     <video 
                       controls 
@@ -703,18 +731,18 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
                 
                 {/* Video Controls */}
                 <div className="flex justify-center gap-2 mb-6">
-                  <div className="bg-gray-100 rounded-full px-4 py-2 flex items-center gap-2 text-sm text-gray-600">
-                    <Volume2 className="h-4 w-4" />
+                  <div className="rounded-full px-4 py-2 flex items-center gap-2 text-sm text-white" style={{ backgroundColor: SOLID }}>
+                    <Volume2 className="h-4 w-4 text-white" />
                     <span>Video Learning</span>
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="flex items-center justify-center h-64 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl border-2 border-dashed border-gray-300">
+              <div className="flex items-center justify-center h-64 rounded-2xl border-2 border-dashed" style={{ background: `${SOLID}08`, borderColor: `${SOLID}33` }}>
                 <div className="text-center">
-                  <Play className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500 text-lg font-medium">No video available for this section</p>
-                  <p className="text-gray-400 text-sm mt-2">Content may be text-based or will be added later</p>
+                  <Play className="h-16 w-16 mx-auto mb-4" style={{ color: SOLID }} />
+                  <p className="text-lg font-medium" style={{ color: SOLID }}>No video available for this section</p>
+                  <p className="text-sm mt-2" style={{ color: `${SOLID}99` }}>Content may be text-based or will be added later</p>
                 </div>
               </div>
             )}
@@ -724,7 +752,7 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
               <div className="text-center">
                 <button
                   onClick={() => setShowQuiz(true)}
-                  className={`bg-gradient-to-r ${gradient} hover:shadow-2xl text-white font-bold py-4 px-8 rounded-2xl transition-all duration-300 shadow-lg hover:scale-105 flex items-center gap-3 mx-auto`}
+                  className={`${gradientClass} hover:shadow-2xl text-white font-bold py-4 px-8 rounded-2xl transition-all duration-300 shadow-lg hover:scale-105 flex items-center gap-3 mx-auto`}
                 >
                   <Trophy className="h-5 w-5" />
                   Take Module Quiz
@@ -735,14 +763,14 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
           </div>
         </div>
 
-        {/* Enhanced Quiz Section */}
+        {/* Quiz Section */}
         {showQuiz && Array.isArray(currentModule.quizzes) && currentModule.quizzes.length > 0 && (
-          <div className="mt-8 bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/50 overflow-hidden">
+          <div className="mt-8 bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl border overflow-hidden" style={{ borderColor: `${SOLID}14` }}>
             {/* Quiz Header */}
-            <div className="bg-gradient-to-r from-purple-500 to-pink-600 p-6 text-white relative overflow-hidden">
+            <div className={`${gradientClass} p-6 text-white relative overflow-hidden`}>
               <div className="absolute inset-0 bg-black/10"></div>
               <div className="absolute top-4 right-4 opacity-20">
-                <Trophy className="h-16 w-16" />
+                <Trophy className="h-16 w-16 text-white" />
               </div>
               <div className="relative flex justify-between items-center">
                 <div>
@@ -764,50 +792,54 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
                     const isAnswered = userAnswer !== undefined;
 
                     return (
-                      <div key={index} className="bg-gray-50 rounded-2xl p-6 border border-gray-200">
+                      <div key={index} className="rounded-2xl p-6 border" style={{ backgroundColor: `${SOLID}05`, borderColor: `${SOLID}22` }}>
                         <div className="flex items-start gap-4 mb-4">
-                          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0 mt-1">
+                          <div className={`w-8 h-8 ${gradientBrClass} rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0 mt-1`}>
                             {index + 1}
                           </div>
-                          <p className="font-semibold text-gray-900 text-lg leading-relaxed">
+                          <p className="font-semibold text-lg leading-relaxed" style={{ color: SOLID }}>
                             {q.question}
                           </p>
                         </div>
                         
                         <div className="space-y-3 ml-12">
-                          {q.options.map((option, optIdx) => (
-                            <label
-                              key={optIdx}
-                              className={`flex items-center gap-4 px-6 py-4 border-2 rounded-xl cursor-pointer transition-all duration-300 ${
-                                quizAnswers[index] === optIdx
-                                  ? "bg-blue-50 border-blue-300 shadow-md scale-[1.02]"
-                                  : "border-gray-200 hover:border-blue-200 hover:bg-blue-50/50 hover:scale-[1.01]"
-                              }`}
-                            >
-                              <input
-                                type="radio"
-                                name={`question-${index}`}
-                                checked={quizAnswers[index] === optIdx}
-                                onChange={() => handleOptionSelect(index, optIdx)}
-                                className="hidden"
-                              />
-                              <div className={`flex items-center justify-center h-6 w-6 rounded-full border-2 transition-all ${
-                                quizAnswers[index] === optIdx 
-                                  ? "border-blue-500 bg-blue-500 shadow-lg" 
-                                  : "border-gray-300 hover:border-blue-400"
-                              }`}>
-                                {quizAnswers[index] === optIdx && (
-                                  <div className="h-3 w-3 rounded-full bg-white"></div>
-                                )}
-                              </div>
-                              <span className="text-gray-800 font-medium flex-1">{option}</span>
-                            </label>
-                          ))}
+                          {q.options.map((option, optIdx) => {
+                            const selected = quizAnswers[index] === optIdx;
+                            return (
+                              <label
+                                key={optIdx}
+                                className={`flex items-center gap-4 px-6 py-4 border-2 rounded-xl cursor-pointer transition-all duration-300 ${selected ? "shadow-md scale-[1.02]" : ""}`}
+                                style={{
+                                  borderColor: selected ? `${SOLID}66` : `${SOLID}22`,
+                                  backgroundColor: selected ? `${SOLID}0F` : "white"
+                                }}
+                              >
+                                <input
+                                  type="radio"
+                                  name={`question-${index}`}
+                                  checked={selected}
+                                  onChange={() => handleOptionSelect(index, optIdx)}
+                                  className="hidden"
+                                />
+                                <div
+                                  className="flex items-center justify-center h-6 w-6 rounded-full border-2 transition-all"
+                                  style={{
+                                    borderColor: selected ? SOLID : `${SOLID}66`,
+                                    backgroundColor: selected ? SOLID : "transparent",
+                                    boxShadow: selected ? `0 0 0 2px ${SOLID}33` : "none"
+                                  }}
+                                >
+                                  {selected && <div className="h-3 w-3 rounded-full bg-white"></div>}
+                                </div>
+                                <span className="font-medium flex-1" style={{ color: SOLID }}>{option}</span>
+                              </label>
+                            );
+                          })}
                         </div>
 
-                        {showCorrectAnswers && userAnswer !== q.correctAnswer && (
-                          <div className="mt-4 ml-12 p-4 bg-red-50 border-l-4 border-red-400 rounded-r-xl">
-                            <div className="flex items-center gap-2 text-red-800">
+                        {showCorrectAnswers && isAnswered && userAnswer !== q.correctAnswer && (
+                          <div className="mt-4 ml-12 p-4 rounded-r-xl" style={{ backgroundColor: "#fef2f2", borderLeft: "4px solid #ef4444" }}>
+                            <div className="flex items-center gap-2" style={{ color: "#991b1b" }}>
                               <Target className="h-4 w-4" />
                               <span className="font-semibold">Correct answer:</span>
                               <span className="font-bold">{q.options[q.correctAnswer]}</span>
@@ -822,11 +854,11 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
                     <button
                       onClick={handleQuizSubmit}
                       disabled={quizAnswers.length < currentModule.quizzes.length}
-                      className={`py-4 px-8 rounded-2xl font-bold text-lg transition-all duration-300 ${
-                        quizAnswers.length < currentModule.quizzes.length
-                          ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                          : "bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-lg hover:shadow-xl hover:scale-105"
-                      }`}
+                      className={`py-4 px-8 rounded-2xl font-bold text-lg transition-all duration-300 text-white`}
+                      style={{
+                        backgroundColor: quizAnswers.length < currentModule.quizzes.length ? `${SOLID}33` : SOLID,
+                        cursor: quizAnswers.length < currentModule.quizzes.length ? "not-allowed" : "pointer"
+                      }}
                     >
                       {quizAnswers.length < currentModule.quizzes.length 
                         ? `Answer ${currentModule.quizzes.length - quizAnswers.length} more question${currentModule.quizzes.length - quizAnswers.length !== 1 ? 's' : ''}`
@@ -839,7 +871,8 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
                           setQuizAnswers([]);
                           setShowCorrectAnswers(false);
                         }}
-                        className="py-4 px-8 rounded-2xl font-bold text-lg bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white shadow-lg hover:shadow-xl hover:scale-105"
+                        className="py-4 px-8 rounded-2xl font-bold text-lg text-white"
+                        style={{ backgroundColor: SOLID }}
                       >
                         Try Again
                       </button>
@@ -847,49 +880,50 @@ const saveProgressToFirebase = async (courseId, moduleIndex, sectionIndex, compl
                   </div>
 
                   {showCorrectAnswers && (
-                    <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-6 text-center">
-                      <div className="text-red-600 mb-4">
+                    <div className="rounded-2xl p-6 text-center" style={{ backgroundColor: "#fef2f2", border: "2px solid #fecaca" }}>
+                      <div className="mb-4" style={{ color: "#dc2626" }}>
                         <RotateCcw className="h-8 w-8 mx-auto mb-2" />
                         <p className="font-semibold text-lg">Some answers were incorrect</p>
-                        <p className="text-sm">Review the correct answers above and try again</p>
+                        <p className="text-sm text-red-700">Review the correct answers above and try again</p>
                       </div>
                     </div>
                   )}
                 </div>
               ) : (
                 <div className="space-y-8">
-                  <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-6 text-center">
+                  <div className="rounded-2xl p-6 text-center" style={{ backgroundColor: "#f0fdf4", border: "2px solid #bbf7d0" }}>
                     <div className="flex justify-center items-center mb-4">
-                      <CheckCircle className="h-12 w-12 text-green-500" />
+                      <CheckCircle className="h-12 w-12" style={{ color: SOLID }} />
                     </div>
-                    <h4 className="font-bold text-2xl text-gray-900">Great job!</h4>
-                    <p className="text-gray-600 mt-2">You've answered all questions correctly.</p>
+                    <h4 className="font-bold text-2xl" style={{ color: SOLID }}>Great job!</h4>
+                    <p className="mt-2" style={{ color: `${SOLID}CC` }}>You've answered all questions correctly.</p>
                   </div>
 
                   {!(isLastModule && isLastSection) ? (
                     <div className="text-center">
                       <button
                         onClick={goToNext}
-                        className={`bg-gradient-to-r ${gradient} hover:shadow-2xl text-white font-bold py-4 px-8 rounded-2xl transition-all duration-300 shadow-lg hover:scale-105 flex items-center gap-3 mx-auto`}
+                        className={`${gradientClass} hover:shadow-2xl text-white font-bold py-4 px-8 rounded-2xl transition-all duration-300 shadow-lg hover:scale-105 flex items-center gap-3 mx-auto`}
                       >
                         {isLastSection ? "Continue to Next Module" : "Continue to Next Section"}
                         <ChevronRight className="h-5 w-5" />
                       </button>
                     </div>
                   ) : (
-                    <div className="bg-gradient-to-r from-blue-50 to-green-50 border-2 border-blue-200 rounded-2xl p-8 text-center">
+                    <div className="rounded-2xl p-8 text-center" style={{ background: "linear-gradient(90deg, #eff6ff 0%, #ecfdf5 100%)", border: "2px solid #bfdbfe" }}>
                       <div className="text-5xl mb-4">🎉</div>
-                      <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                      <h3 className="text-2xl font-bold mb-2" style={{ color: SOLID }}>
                         Training Completed!
                       </h3>
-                      <p className="text-gray-600 mb-6">
+                      <p className="mb-6" style={{ color: `${SOLID}CC` }}>
                         Congratulations on completing "{activeCourse.title}"
                       </p>
                       <button
                         onClick={onBack}
-                        className="inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold py-3 px-8 rounded-2xl transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105"
+                        className="inline-flex items-center justify-center text-white font-bold py-3 px-8 rounded-2xl transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105"
+                        style={{ backgroundColor: SOLID }}
                       >
-                        <Home className="h-5 w-5 mr-2" />
+                        <Home className="h-5 w-5 mr-2 text-white" />
                         Back to Training Dashboard
                       </button>
                     </div>

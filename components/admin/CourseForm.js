@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2, ChevronDown, ChevronUp, X } from "lucide-react";
+import { Plus, Trash2,X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import Select from "react-select";
+import { motion, AnimatePresence } from "framer-motion";
+import Select , { components } from "react-select";
 import { db } from "@/app/firebaseConfig";
 import { collection, addDoc, getDocs, serverTimestamp } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { apiGet } from "@/utils/api";
 
 export default function CourseForm() {
   const { addCourse, userList } = useAuth();
@@ -38,14 +40,27 @@ export default function CourseForm() {
   const [storageWarning, setStorageWarning] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({});
+  const [students, setStudents] = useState([]);
 
   // Initialize Firebase Storage
   const storage = getStorage();
 
+  const fetchData = async () => {
+  const data = await apiGet('students');
+  const uniqueStudents = data.filter((student, index, self) => 
+    index === self.findIndex(s => s.id === student.id)
+  );
+  setStudents(uniqueStudents);
+};
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
   const userOptions =
-    userList?.map((user) => ({
-      value: user,
-      label: user.charAt(0).toUpperCase() + user.slice(1),
+    students?.map((user) => ({
+      value: user?.id,
+      label: `${user.firstname} ${user.lastname}`,
     })) || [];
 
   // Custom styles for react-select to match green theme
@@ -411,6 +426,25 @@ export default function CourseForm() {
     }
   };
 
+const SoftMenu = (props) => (
+  <AnimatePresence>
+    {props.selectProps.menuIsOpen && (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: -12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: -12 }}
+        transition={{
+          duration: 0.45,
+          ease: [0.52, 1, 0.76, 1], // a softer "ease-out" curve
+        }}
+        style={{ originX: 0.5, originY: 0 }}
+      >
+        <components.Menu {...props} />
+      </motion.div>
+    )}
+  </AnimatePresence>
+);
+
   return (
     <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
       <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center gap-2">
@@ -445,7 +479,26 @@ export default function CourseForm() {
           />
         </div>
 
-        <div>
+    <div className="space-y-2">
+      <label className="block text-sm font-medium text-gray-700 mb-2">
+        Assign to Users
+      </label>
+
+      <Select
+        isMulti
+        options={userOptions}
+        value={assignedUser}
+        onChange={setAssignedUser}
+        className="basic-multi-select"
+        classNamePrefix="select"
+        styles={selectStyles}
+        isDisabled={!students || students.length === 0 || isLoading}
+        placeholder="Select users..."
+        components={{ Menu: SoftMenu }}
+      />
+    </div>
+
+        {/* <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Assign to Users
           </label>
@@ -457,10 +510,10 @@ export default function CourseForm() {
             className="basic-multi-select"
             classNamePrefix="select"
             styles={selectStyles}
-            isDisabled={!userList || userList.length === 0 || isLoading}
+            isDisabled={!students || students.length === 0 || isLoading}
             placeholder="Select users..."
           />
-        </div>
+        </div> */}
 
         <div>
           <div className="flex justify-between items-center mb-4">
